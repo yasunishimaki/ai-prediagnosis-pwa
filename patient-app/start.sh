@@ -3,10 +3,14 @@
 
 PORT=8000
 
-echo "🚀 AI事前問診メモを起動します..."
+# リポジトリ直下から配信し、患者用・受付用の両方にアクセスできるようにする
+cd "$(dirname "$0")/.." || exit 1
+
+echo "🚀 AI事前問診メモ（デモ版）を起動します..."
 echo ""
 echo "📱 アクセスURL:"
-echo "   PC: http://localhost:$PORT"
+echo "   患者用: http://localhost:$PORT/patient-app/"
+echo "   受付用: http://localhost:$PORT/reception-app/"
 echo ""
 
 # IPアドレスを取得（Mac/Linux対応）
