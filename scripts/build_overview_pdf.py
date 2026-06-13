@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-株式会社Qureas「ワイヤレス充電棚 × デジタル問診」概要 A4 1枚（イラスト入り）。
+株式会社Qureas「AIデジタル問診」概要 A4 1枚（イラスト＋画面/出力イメージ入り）。
 python scripts/build_overview_pdf.py 出力.pdf
 """
 import os
 import sys
+import random
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
@@ -26,23 +27,22 @@ def register_fonts():
 
 JP, JPB = register_fonts()
 
-# パレット
 NAVY = colors.HexColor("#1F4E96")
 BLUE = colors.HexColor("#4A90E2")
 LBLUE = colors.HexColor("#EAF1FB")
 GREEN = colors.HexColor("#2BB673")
+RED = colors.HexColor("#E55353")
 INK = colors.HexColor("#2C3E50")
 GREY = colors.HexColor("#7F8C8D")
 LINE = colors.HexColor("#D6DEE8")
 WARNBG = colors.HexColor("#FFF8E6")
+WARNINK = colors.HexColor("#8B6914")
 
 W, H = A4
 
 
-# ---------- テキスト補助 ----------
 def text(c, x, y, s, font=JP, size=10, color=INK, align="l"):
-    c.setFillColor(color)
-    c.setFont(font, size)
+    c.setFillColor(color); c.setFont(font, size)
     if align == "c":
         c.drawCentredString(x, y, s)
     elif align == "r":
@@ -52,11 +52,8 @@ def text(c, x, y, s, font=JP, size=10, color=INK, align="l"):
 
 
 def wrap(c, x, y, s, font, size, color, maxw, leading):
-    """文字単位の簡易折り返し（日本語向け）。"""
-    c.setFont(font, size)
-    c.setFillColor(color)
-    line = ""
-    cy = y
+    c.setFont(font, size); c.setFillColor(color)
+    line = ""; cy = y
     for ch in s:
         if ch == "\n":
             c.drawString(x, cy, line); line = ""; cy -= leading; continue
@@ -69,39 +66,29 @@ def wrap(c, x, y, s, font, size, color, maxw, leading):
     return cy
 
 
-# ---------- イラスト（ベクター） ----------
-def icon_phone(c, cx, cy, s=1.0, talk=True):
+# ---------- フローアイコン ----------
+def icon_phone(c, cx, cy, s=1.0):
     w, h = 30 * s, 56 * s
     c.setLineWidth(1.6); c.setStrokeColor(NAVY); c.setFillColor(colors.white)
     c.roundRect(cx - w / 2, cy - h / 2, w, h, 5 * s, stroke=1, fill=1)
     c.setFillColor(LBLUE)
     c.roundRect(cx - w / 2 + 3 * s, cy - h / 2 + 6 * s, w - 6 * s, h - 12 * s, 2 * s, stroke=0, fill=1)
-    # マイク
-    c.setFillColor(BLUE)
-    c.circle(cx, cy - h / 2 + 3 * s, 1.6 * s, stroke=0, fill=1)
-    if talk:
-        c.setFillColor(NAVY)
-        c.circle(cx - 2 * s, cy + 4 * s, 2 * s, stroke=0, fill=1)
-        # 音声波
-        c.setStrokeColor(BLUE); c.setLineWidth(1.4)
-        for i, r in enumerate((5, 9, 13)):
-            c.arc(cx - 1 * s - r * s, cy + 4 * s - r * s, cx - 1 * s + r * s, cy + 4 * s + r * s, -60, 120)
+    c.setFillColor(NAVY); c.circle(cx - 2 * s, cy + 4 * s, 2 * s, stroke=0, fill=1)
+    c.setStrokeColor(BLUE); c.setLineWidth(1.4)
+    for r in (5, 9, 13):
+        c.arc(cx - 1 * s - r * s, cy + 4 * s - r * s, cx - 1 * s + r * s, cy + 4 * s + r * s, -60, 120)
 
 
 def icon_ai(c, cx, cy, s=1.0):
-    # 吹き出し + ロボット顔
     c.setStrokeColor(NAVY); c.setLineWidth(1.6); c.setFillColor(colors.white)
     c.roundRect(cx - 22 * s, cy - 16 * s, 44 * s, 32 * s, 7 * s, stroke=1, fill=1)
-    c.setFillColor(colors.white)
     p = c.beginPath(); p.moveTo(cx - 6 * s, cy - 16 * s); p.lineTo(cx - 12 * s, cy - 24 * s); p.lineTo(cx + 2 * s, cy - 16 * s)
     c.drawPath(p, stroke=1, fill=1)
-    # 顔
     c.setFillColor(BLUE)
     c.circle(cx - 8 * s, cy + 2 * s, 3.2 * s, stroke=0, fill=1)
     c.circle(cx + 8 * s, cy + 2 * s, 3.2 * s, stroke=0, fill=1)
     c.setStrokeColor(NAVY); c.setLineWidth(1.4)
     c.line(cx - 7 * s, cy - 7 * s, cx + 7 * s, cy - 7 * s)
-    # アンテナ
     c.line(cx, cy + 16 * s, cx, cy + 22 * s)
     c.setFillColor(GREEN); c.circle(cx, cy + 23 * s, 2 * s, stroke=0, fill=1)
 
@@ -111,24 +98,17 @@ def icon_qr(c, cx, cy, s=1.0):
     c.setFillColor(colors.white); c.setStrokeColor(NAVY); c.setLineWidth(1.4)
     c.rect(cx - sz / 2, cy - sz / 2, sz, sz, stroke=1, fill=1)
     c.setFillColor(NAVY)
-    # ファインダ3つ
     f = 9 * s
     for (fx, fy) in [(-1, 1), (1, 1), (-1, -1)]:
-        ox = cx + fx * (sz / 2 - f / 2 - 3 * s)
-        oy = cy + fy * (sz / 2 - f / 2 - 3 * s)
-        c.rect(ox - f / 2, oy - f / 2, f, f, stroke=0, fill=1)
+        ox = cx + fx * (sz / 2 - f / 2 - 3 * s); oy = cy + fy * (sz / 2 - f / 2 - 3 * s)
+        c.setFillColor(NAVY); c.rect(ox - f / 2, oy - f / 2, f, f, stroke=0, fill=1)
         c.setFillColor(colors.white); c.rect(ox - f / 2 + 2.2 * s, oy - f / 2 + 2.2 * s, f - 4.4 * s, f - 4.4 * s, stroke=0, fill=1)
         c.setFillColor(NAVY); c.rect(ox - 1.4 * s, oy - 1.4 * s, 2.8 * s, 2.8 * s, stroke=0, fill=1)
-    # ランダムモジュール
-    import random
-    random.seed(7)
-    m = 2.4 * s
+    random.seed(7); m = 2.4 * s
     for gx in range(4):
         for gy in range(4):
             if random.random() > 0.5:
-                px = cx + 2 * s + gx * (m + 1.2 * s)
-                py = cy - 8 * s + gy * (m + 1.2 * s)
-                c.rect(px, py, m, m, stroke=0, fill=1)
+                c.rect(cx + 2 * s + gx * (m + 1.2 * s), cy - 8 * s + gy * (m + 1.2 * s), m, m, stroke=0, fill=1)
 
 
 def icon_tablet(c, cx, cy, s=1.0):
@@ -138,12 +118,8 @@ def icon_tablet(c, cx, cy, s=1.0):
     c.setFillColor(LBLUE)
     c.roundRect(cx - w / 2 + 4 * s, cy - h / 2 + 4 * s, w - 12 * s, h - 8 * s, 2 * s, stroke=0, fill=1)
     c.setFillColor(NAVY); c.circle(cx + w / 2 - 4 * s, cy, 1.4 * s, stroke=0, fill=1)
-    # カメラ枠（読み取り）
     c.setStrokeColor(GREEN); c.setLineWidth(1.8)
-    bx, by, bs = cx - 6 * s, cy - 8 * s, 16 * s
-    for dx, dy, a1, a2 in [(0, bs, 0, 0)]:
-        pass
-    cor = 5 * s
+    bx, by, bs, cor = cx - 6 * s, cy - 8 * s, 16 * s, 5 * s
     c.line(bx, by, bx + cor, by); c.line(bx, by, bx, by + cor)
     c.line(bx + bs, by, bx + bs - cor, by); c.line(bx + bs, by, bx + bs, by + cor)
     c.line(bx, by + bs, bx + cor, by + bs); c.line(bx, by + bs, bx, by + bs - cor)
@@ -152,52 +128,17 @@ def icon_tablet(c, cx, cy, s=1.0):
 
 def icon_printer(c, cx, cy, s=1.0):
     c.setStrokeColor(NAVY); c.setLineWidth(1.6)
-    # 本体
-    c.setFillColor(LBLUE)
-    c.roundRect(cx - 22 * s, cy - 12 * s, 44 * s, 22 * s, 3 * s, stroke=1, fill=1)
-    # 上の紙
-    c.setFillColor(colors.white)
-    c.rect(cx - 14 * s, cy + 8 * s, 28 * s, 12 * s, stroke=1, fill=1)
-    # 出てくる紙（メモ）
-    c.setFillColor(colors.white)
-    c.rect(cx - 14 * s, cy - 26 * s, 28 * s, 18 * s, stroke=1, fill=1)
+    c.setFillColor(LBLUE); c.roundRect(cx - 22 * s, cy - 12 * s, 44 * s, 22 * s, 3 * s, stroke=1, fill=1)
+    c.setFillColor(colors.white); c.rect(cx - 14 * s, cy + 8 * s, 28 * s, 12 * s, stroke=1, fill=1)
+    c.setFillColor(colors.white); c.rect(cx - 14 * s, cy - 26 * s, 28 * s, 18 * s, stroke=1, fill=1)
     c.setStrokeColor(BLUE); c.setLineWidth(1.0)
     for i in range(3):
-        yy = cy - 13 * s - i * 4 * s
-        c.line(cx - 10 * s, yy, cx + 10 * s, yy)
-    c.setFillColor(GREEN); c.setStrokeColor(GREEN)
-    c.circle(cx + 16 * s, cy - 2 * s, 1.6 * s, stroke=0, fill=1)
-
-
-def icon_shelf(c, cx, cy, s=1.0):
-    # ワイヤレス充電棚（スマホが並ぶ棚）
-    w, h = 60 * s, 46 * s
-    c.setStrokeColor(NAVY); c.setLineWidth(1.6); c.setFillColor(colors.white)
-    c.roundRect(cx - w / 2, cy - h / 2, w, h, 4 * s, stroke=1, fill=1)
-    c.setStrokeColor(LINE); c.setLineWidth(1.0)
-    # 仕切り
-    c.line(cx - w / 2, cy, cx + w / 2, cy)
-    for gx in (-1, 1):
-        c.line(cx + gx * w / 6, cy - h / 2, cx + gx * w / 6, cy + h / 2)
-    # スマホ6台
-    for col in (-1, 0, 1):
-        for row in (1, -1):
-            px = cx + col * w / 6
-            py = cy + (h / 4) * (1 if row == 1 else -1)
-            c.setFillColor(LBLUE); c.setStrokeColor(BLUE); c.setLineWidth(0.8)
-            c.roundRect(px - 5 * s, py - 8 * s, 10 * s, 16 * s, 1.5 * s, stroke=1, fill=1)
-    # 充電マーク
-    c.setFillColor(GREEN)
-    p = c.beginPath()
-    zx, zy = cx + w / 2 - 8 * s, cy + h / 2 - 7 * s
-    p.moveTo(zx + 1 * s, zy + 5 * s); p.lineTo(zx - 2 * s, zy); p.lineTo(zx, zy)
-    p.lineTo(zx - 1 * s, zy - 5 * s); p.lineTo(zx + 2 * s, zy); p.lineTo(zx, zy)
-    p.close(); c.drawPath(p, stroke=0, fill=1)
+        yy = cy - 13 * s - i * 4 * s; c.line(cx - 10 * s, yy, cx + 10 * s, yy)
+    c.setFillColor(GREEN); c.circle(cx + 16 * s, cy - 2 * s, 1.6 * s, stroke=0, fill=1)
 
 
 def arrow(c, x1, y, x2):
-    c.setStrokeColor(BLUE); c.setLineWidth(2)
-    c.line(x1, y, x2 - 4, y)
+    c.setStrokeColor(BLUE); c.setLineWidth(2); c.line(x1, y, x2 - 4, y)
     c.setFillColor(BLUE)
     p = c.beginPath(); p.moveTo(x2, y); p.lineTo(x2 - 7, y + 4); p.lineTo(x2 - 7, y - 4); p.close()
     c.drawPath(p, stroke=0, fill=1)
@@ -209,60 +150,111 @@ def check(c, x, y, s=4):
     c.line(x - s * 0.2, y - s * 0.9, x + s * 1.1, y + s * 0.9)
 
 
+# ---------- スマホ画面イメージ（患者アプリ：AIが質問） ----------
+def phone_mockup(c, x, y, w, h):
+    # 端末
+    c.setFillColor(colors.HexColor("#33373D")); c.roundRect(x, y, w, h, 14, stroke=0, fill=1)
+    sx, sy, sw, sh = x + 6, y + 8, w - 12, h - 16
+    c.setFillColor(colors.HexColor("#F5F7FA")); c.roundRect(sx, sy, sw, sh, 8, stroke=0, fill=1)
+    # ノッチ
+    c.setFillColor(colors.HexColor("#33373D")); c.roundRect(x + w / 2 - 16, y + h - 12, 32, 7, 3, stroke=0, fill=1)
+    top = sy + sh
+    # ヘッダー
+    c.setFillColor(NAVY); c.roundRect(sx, top - 30, sw, 30, 0, stroke=0, fill=1)
+    c.rect(sx, top - 30, sw, 8, stroke=0, fill=1)
+    text(c, sx + sw / 2, top - 20, "問診メモ", JPB, 9, colors.white, "c")
+    # 進捗バー
+    by = top - 48
+    text(c, sx + 8, by + 2, "あと少しで完了", JP, 6.5, GREY)
+    c.setFillColor(colors.HexColor("#E2E8F0")); c.roundRect(sx + 8, by - 6, sw - 16, 6, 3, stroke=0, fill=1)
+    c.setFillColor(GREEN); c.roundRect(sx + 8, by - 6, (sw - 16) * 0.7, 6, 3, stroke=0, fill=1)
+    text(c, sx + sw - 8, by - 16, "7 / 9 項目", JP, 6, GREY, "r")
+    # 質問カード
+    qy = by - 30
+    c.setFillColor(colors.white); c.setStrokeColor(LINE); c.setLineWidth(1)
+    c.roundRect(sx + 8, qy - 76, sw - 16, 76, 8, stroke=1, fill=1)
+    text(c, sx + 16, qy - 14, "服薬中の薬", JPB, 6.5, GREEN)
+    # ロボットアバター
+    ax, ay = sx + 22, qy - 40
+    c.setFillColor(NAVY); c.circle(ax, ay, 11, stroke=0, fill=1)
+    c.setFillColor(colors.white); c.circle(ax - 3.5, ay + 1, 2, stroke=0, fill=1); c.circle(ax + 3.5, ay + 1, 2, stroke=0, fill=1)
+    c.setStrokeColor(colors.white); c.setLineWidth(1.2); c.line(ax - 3, ay - 4, ax + 3, ay - 4)
+    wrap(c, sx + 40, qy - 32, "今、飲んでいる\nお薬はありますか？", JPB, 8.5, INK, sw - 56, 12)
+    # マイク
+    mx, my = sx + sw / 2, qy - 110
+    c.setFillColor(RED); c.circle(mx, my, 20, stroke=0, fill=1)
+    c.setFillColor(colors.white)
+    c.roundRect(mx - 4, my - 3, 8, 13, 4, stroke=0, fill=1)
+    c.setStrokeColor(colors.white); c.setLineWidth(1.6)
+    c.arc(mx - 8, my - 12, mx + 8, my + 4, 200, 140)
+    c.line(mx, my - 12, mx, my - 16)
+    text(c, mx, my - 30, "押してお答えください", JP, 6.2, GREY, "c")
+
+
+# ---------- 出力イメージ（受付プリント：問診メモ） ----------
+def memo_mockup(c, x, y, w, h):
+    # 影
+    c.setFillColor(colors.HexColor("#DCE3EA")); c.roundRect(x + 3, y - 3, w, h, 4, stroke=0, fill=1)
+    c.setFillColor(colors.white); c.setStrokeColor(LINE); c.setLineWidth(1)
+    c.roundRect(x, y, w, h, 4, stroke=1, fill=1)
+    top = y + h
+    text(c, x + 14, top - 22, "事前問診メモ", JPB, 11, INK)
+    text(c, x + w - 14, top - 16, "クレアスクリニック", JP, 7, NAVY, "r")
+    text(c, x + w - 14, top - 26, "2026/07/02 10:23", JP, 6.5, GREY, "r")
+    c.setStrokeColor(NAVY); c.setLineWidth(1.4); c.line(x + 14, top - 30, x + w - 14, top - 30)
+    rows = [
+        ("主訴", "後頭部のズキズキする頭痛・吐き気", False),
+        ("発症時期", "昨夜、寝る前ごろから", False),
+        ("症状の性質", "拍動性で、夜間に強くなる", False),
+        ("服薬中の薬", "降圧薬を毎朝1錠 服用", True),
+        ("アレルギー", "特になし", True),
+        ("既往歴", "高血圧で通院中", False),
+        ("発熱の有無", "なし", False),
+        ("随伴症状", "吐き気あり", False),
+    ]
+    ry = top - 30
+    rh = (h - 56) / len(rows)
+    for label, val, hl in rows:
+        ry -= rh
+        if hl:
+            c.setFillColor(WARNBG); c.rect(x + 8, ry, w - 16, rh, stroke=0, fill=1)
+        c.setStrokeColor(colors.HexColor("#EDF1F5")); c.setLineWidth(0.6)
+        c.line(x + 14, ry, x + w - 14, ry)
+        lab_color = WARNINK if hl else GREY
+        text(c, x + 16, ry + rh / 2 - 3, label + ("★" if hl else ""), JPB, 7, lab_color)
+        text(c, x + 96, ry + rh / 2 - 3, val, JP, 7.5, INK)
+    text(c, x + 14, y + 12, "※ 患者本人がAIで作成した事前メモ。診察で確認します。", JP, 5.8, GREY)
+
+
 # ---------- ページ生成 ----------
 def build(out_path):
     c = canvas.Canvas(out_path, pagesize=A4)
-    M = 36
+    M = 32
 
-    # ===== ヘッダー帯 =====
-    c.setFillColor(NAVY); c.rect(0, H - 96, W, 96, stroke=0, fill=1)
-    c.setFillColor(BLUE); c.rect(0, H - 100, W, 4, stroke=0, fill=1)
-    text(c, M, H - 34, "株式会社 Qureas", JPB, 15, colors.white)
-    text(c, M, H - 62, "ワイヤレス充電棚 × デジタル問診", JPB, 21, colors.white)
-    text(c, M, H - 84, "看護業務を、もっとスマートに。", JP, 11.5, colors.HexColor("#CFE0F6"))
-    # 右上の十字マーク
+    # ヘッダー
+    c.setFillColor(NAVY); c.rect(0, H - 92, W, 92, stroke=0, fill=1)
+    c.setFillColor(BLUE); c.rect(0, H - 96, W, 4, stroke=0, fill=1)
+    text(c, M, H - 30, "株式会社 Qureas", JPB, 13, colors.white)
+    text(c, M, H - 58, "AIデジタル問診", JPB, 22, colors.white)
+    text(c, M, H - 80, "話すだけで、受付前の問診メモが完成。看護業務を、もっとスマートに。", JP, 11, colors.HexColor("#CFE0F6"))
     c.setFillColor(colors.white)
-    cxp, cyp = W - 54, H - 52
-    c.roundRect(cxp - 6, cyp - 20, 12, 40, 2, stroke=0, fill=1)
-    c.roundRect(cxp - 20, cyp - 6, 40, 12, 2, stroke=0, fill=1)
+    cxp, cyp = W - 52, H - 50
+    c.roundRect(cxp - 6, cyp - 19, 12, 38, 2, stroke=0, fill=1)
+    c.roundRect(cxp - 19, cyp - 6, 38, 12, 2, stroke=0, fill=1)
 
-    y = H - 124
-    text(c, M, y, "受付前の問診を“話すだけ”でデジタル化。使う端末は充電棚で常に満充電・すぐ使える状態に。",
-         JPB, 11.5, INK)
+    # リード文
+    y = H - 116
+    text(c, M, y, "患者さんがスマホに症状を話すだけ。AIが足りない情報を質問して、問診メモを自動で仕上げます。",
+         JPB, 11, INK)
     y -= 16
-    wrap(c, M, y, "患者さんがスマホに症状を話すと、AIが不足項目を自動でやさしく質問し、問診メモを作成。"
-                  "QRコードを受付の端末で読み取れば、要点が整理された状態で受付・診察へ引き継げます。",
-         JP, 9.5, GREY, W - 2 * M, 13)
+    y = wrap(c, M, y, "クリニックごとに「聞き取るべき項目」を設定でき、必須項目の抜けを防止。"
+                      "完成したメモはQRコードで受付に渡し、その場で表示・印刷できます。",
+             JP, 9.5, GREY, W - 2 * M, 13)
 
-    # ===== 2つの仕組み =====
-    y = H - 176
-    text(c, M, y, "■ ご提供する2つの仕組み", JPB, 12, NAVY)
-    y -= 12
-    cardw = (W - 2 * M - 14) / 2
-    cardh = 96
-    cy0 = y - cardh
-    # カード1: 充電棚
-    c.setFillColor(LBLUE); c.setStrokeColor(LINE); c.setLineWidth(1)
-    c.roundRect(M, cy0, cardw, cardh, 8, stroke=1, fill=1)
-    icon_shelf(c, M + 52, cy0 + cardh / 2 + 2, 0.9)
-    text(c, M + 96, cy0 + cardh - 22, "ワイヤレス充電棚", JPB, 12, NAVY)
-    wrap(c, M + 96, cy0 + cardh - 40, "院内のスマホ・タブレットをまとめて置くだけで充電。"
-                                       "ケーブル抜き差し不要で、いつでも満充電・すぐ使える。",
-         JP, 8.8, INK, cardw - 104, 12)
-    # カード2: デジタル問診
-    x2 = M + cardw + 14
-    c.setFillColor(LBLUE); c.setStrokeColor(LINE)
-    c.roundRect(x2, cy0, cardw, cardh, 8, stroke=1, fill=1)
-    icon_phone(c, x2 + 44, cy0 + cardh / 2 + 2, 0.9)
-    text(c, x2 + 78, cy0 + cardh - 22, "デジタル問診（AI）", JPB, 12, NAVY)
-    wrap(c, x2 + 78, cy0 + cardh - 40, "音声AIが患者さんに不足項目を質問し、問診メモを自動作成。"
-                                        "クリニックごとに聞き取る項目を設定できます。",
-         JP, 8.8, INK, cardw - 86, 12)
-
-    # ===== 問診の流れ =====
-    y = cy0 - 26
-    text(c, M, y, "■ デジタル問診の流れ（患者さん → 受付）", JPB, 12, NAVY)
-    flow_y = y - 100
+    # ご利用の流れ
+    y -= 6
+    text(c, M, y, "■ ご利用の流れ（患者さん → 受付）", JPB, 12.5, NAVY)
+    flow_y = y - 96
     steps = [
         ("①", "スマホで話す", "症状を自由に\nお話しください", icon_phone),
         ("②", "AIが質問", "足りない項目を\n音声で確認", icon_ai),
@@ -270,59 +262,69 @@ def build(out_path):
         ("④", "受付で読取", "iPadのカメラで\nスキャン", icon_tablet),
         ("⑤", "メモを出力", "プリンタで\n印刷・共有", icon_printer),
     ]
-    n = len(steps)
-    colw = (W - 2 * M) / n
+    n = len(steps); colw = (W - 2 * M) / n
     for i, (no, title, desc, icon) in enumerate(steps):
         cx = M + colw * i + colw / 2
         c.setFillColor(colors.white); c.setStrokeColor(LINE); c.setLineWidth(1)
-        c.roundRect(cx - colw / 2 + 5, flow_y - 8, colw - 10, 84, 7, stroke=1, fill=1)
-        icon(c, cx, flow_y + 46, 0.62)
-        c.setFillColor(BLUE)
-        c.circle(cx - colw / 2 + 14, flow_y + 70, 7, stroke=0, fill=1)
-        text(c, cx - colw / 2 + 14, flow_y + 67, no, JPB, 9, colors.white, "c")
-        text(c, cx, flow_y + 20, title, JPB, 9.2, NAVY, "c")
+        c.roundRect(cx - colw / 2 + 5, flow_y - 6, colw - 10, 86, 7, stroke=1, fill=1)
+        icon(c, cx, flow_y + 50, 0.64)
+        c.setFillColor(BLUE); c.circle(cx - colw / 2 + 15, flow_y + 72, 7.5, stroke=0, fill=1)
+        text(c, cx - colw / 2 + 15, flow_y + 69, no, JPB, 9, colors.white, "c")
+        text(c, cx, flow_y + 22, title, JPB, 9.4, NAVY, "c")
         for k, ln in enumerate(desc.split("\n")):
-            text(c, cx, flow_y + 8 - k * 10, ln, JP, 7.6, GREY, "c")
+            text(c, cx, flow_y + 10 - k * 10, ln, JP, 7.6, GREY, "c")
         if i < n - 1:
-            arrow(c, cx + colw / 2 - 6, flow_y + 40, cx + colw / 2 + 6)
+            arrow(c, cx + colw / 2 - 6, flow_y + 42, cx + colw / 2 + 6)
 
-    # ===== 導入メリット =====
-    y = flow_y - 26
-    text(c, M, y, "■ 看護・受付業務へのメリット", JPB, 12, NAVY)
-    y -= 8
+    # 画面・出力イメージ
+    y = flow_y - 24
+    text(c, M, y, "■ 画面・出力イメージ", JPB, 12.5, NAVY)
+    img_top = y - 12
+    img_h = 300
+    img_bottom = img_top - img_h
+    # 左：スマホ画面
+    pw, ph = 156, img_h
+    px = M + 24
+    c.setFillColor(LBLUE); c.roundRect(M, img_bottom - 26, (W - 2 * M - 16) * 0.40, img_h + 26, 10, stroke=0, fill=1)
+    phone_mockup(c, px, img_bottom, pw, ph)
+    text(c, M + (W - 2 * M - 16) * 0.40 / 2, img_bottom - 16, "患者さんのスマホ画面（AIが追加質問）", JPB, 8.5, NAVY, "c")
+    # 右：出力メモ
+    rx = M + (W - 2 * M - 16) * 0.40 + 16
+    rw = (W - 2 * M) - (rx - M)
+    c.setFillColor(LBLUE); c.roundRect(rx, img_bottom - 26, rw, img_h + 26, 10, stroke=0, fill=1)
+    memo_mockup(c, rx + 16, img_bottom + 6, rw - 32, img_h - 12)
+    text(c, rx + rw / 2, img_bottom - 16, "受付でのプリント出力イメージ", JPB, 8.5, NAVY, "c")
+
+    # 導入メリット
+    y = img_bottom - 44
+    text(c, M, y, "■ 導入メリット", JPB, 12.5, NAVY)
+    y -= 10
     benefits = [
-        ("問診の聞き取り負担を軽減", "来院前後の基本ヒアリングをAIが代行し、要点が整理された状態で受付へ。"),
-        ("記入漏れ・聞き直しを削減", "クリニック別の必須項目をAIが必ず確認。抜けのない問診メモに。"),
-        ("端末はいつでも使える状態", "ワイヤレス充電棚で常に満充電。電池切れ・準備の手間をなくす。"),
-        ("紙でもデジタルでも共有可能", "QRで受付へ引き継ぎ、その場で印刷。既存の運用になじむ。"),
+        ("聞き取り負担を軽減", "基本ヒアリングをAIが代行。要点が揃った状態で受付・診察へ。"),
+        ("記入漏れを防止", "クリニック別の必須項目をAIが必ず確認。抜けのないメモに。"),
+        ("既存運用になじむ", "QRで受付に渡し、その場で印刷。紙でもデジタルでも共有可能。"),
     ]
-    colw2 = (W - 2 * M - 16) / 2
-    bh = 40
+    bw = (W - 2 * M - 2 * 12) / 3
+    bh = 52
     for i, (t1, t2) in enumerate(benefits):
-        col = i % 2
-        row = i // 2
-        bx = M + col * (colw2 + 16)
-        by = y - 8 - row * (bh + 8) - bh
+        bx = M + i * (bw + 12); by = y - bh
         c.setFillColor(colors.white); c.setStrokeColor(LINE); c.setLineWidth(1)
-        c.roundRect(bx, by, colw2, bh, 6, stroke=1, fill=1)
-        c.setFillColor(colors.HexColor("#E8F6EE"))
-        c.circle(bx + 18, by + bh - 14, 9, stroke=0, fill=1)
-        check(c, bx + 18, by + bh - 13, 4.5)
-        text(c, bx + 34, by + bh - 16, t1, JPB, 9.6, NAVY)
-        wrap(c, bx + 34, by + bh - 28, t2, JP, 7.8, GREY, colw2 - 42, 10)
+        c.roundRect(bx, by, bw, bh, 6, stroke=1, fill=1)
+        c.setFillColor(colors.HexColor("#E8F6EE")); c.circle(bx + 18, by + bh - 16, 9, stroke=0, fill=1)
+        check(c, bx + 18, by + bh - 15, 4.5)
+        text(c, bx + 32, by + bh - 18, t1, JPB, 9.6, NAVY)
+        wrap(c, bx + 12, by + bh - 32, t2, JP, 7.8, GREY, bw - 24, 10)
 
-    # ===== フッター =====
-    fy = 70
-    c.setStrokeColor(LINE); c.setLineWidth(1); c.line(M, fy + 24, W - M, fy + 24)
-    c.setFillColor(WARNBG); c.setStrokeColor(colors.HexColor("#E8D9A8"))
-    c.roundRect(M, fy - 4, W - 2 * M, 24, 4, stroke=1, fill=1)
-    text(c, M + 10, fy + 6, "※ 本サービスは受付前の問診メモ作成を支援するものです。AIは診断・治療提案を行いません。診察は医師が実施します。",
-         JP, 8, colors.HexColor("#8B6914"))
-    text(c, M, fy - 22, "株式会社 Qureas　ワイヤレス充電棚・デジタル問診", JPB, 9.5, NAVY)
-    text(c, W - M, fy - 22, "デモ実施: 2026年7月2日", JP, 9, GREY, "r")
+    # フッター
+    fy = 54
+    c.setFillColor(WARNBG); c.setStrokeColor(colors.HexColor("#E8D9A8")); c.setLineWidth(1)
+    c.roundRect(M, fy, W - 2 * M, 22, 4, stroke=1, fill=1)
+    text(c, M + 10, fy + 8, "※ 本サービスは受付前の問診メモ作成を支援するものです。AIは診断・治療提案を行いません。診察は医師が実施します。",
+         JP, 8, WARNINK)
+    text(c, M, fy - 16, "株式会社 Qureas　AIデジタル問診", JPB, 9.5, NAVY)
+    text(c, W - M, fy - 16, "デモ実施: 2026年7月2日", JP, 9, GREY, "r")
 
-    c.showPage()
-    c.save()
+    c.showPage(); c.save()
     print("wrote", out_path)
 
 
