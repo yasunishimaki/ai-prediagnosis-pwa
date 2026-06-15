@@ -1,7 +1,43 @@
 // ============================================
 // AI事前問診メモ - デモ版（7月2日 クレアスクリニック）
 // 自由発話 → AIが不足項目を音声で追加質問 → メモ確定 → QR表示
+//
+// 【配布用バックエンド（任意）】
+// API_PROXY_BASE に Cloudflare Worker 等のURLを設定すると、APIキーを
+// クライアントに置かずに本番動作する（URLを他の人に配布できる）。
+// 空の場合は「端末ごとにAPIキー設定 or モック動作」になる。
 // ============================================
+
+// ====== ここを設定すると配布可能になる ======
+// 例: 'https://ai-prediagnosis-proxy.xxxxx.workers.dev'
+const API_PROXY_BASE = '';
+// Worker側で APP_TOKEN を設定した場合のみ、同じ合言葉を入れる（任意）
+const API_APP_TOKEN = '';
+// ===========================================
+
+// バックエンド経由 or 端末のAPIキーが使える場合は本番動作（それ以外はモック）
+function isLiveMode() {
+  return !!API_PROXY_BASE || !!state.apiKey;
+}
+
+// API呼び出し先・ヘッダーの共通化（プロキシ or 直接OpenAI）
+function apiEndpoint(path) {
+  if (API_PROXY_BASE) {
+    const map = { 'audio/transcriptions': '/api/transcribe', 'chat/completions': '/api/chat' };
+    return API_PROXY_BASE.replace(/\/+$/, '') + (map[path] || ('/' + path));
+  }
+  return 'https://api.openai.com/v1/' + path;
+}
+
+function apiHeaders(extra) {
+  const h = Object.assign({}, extra || {});
+  if (API_PROXY_BASE) {
+    if (API_APP_TOKEN) h['x-app-token'] = API_APP_TOKEN; // 合言葉（設定時のみ）
+  } else {
+    h['Authorization'] = `Bearer ${state.apiKey}`;        // 直接呼び出し時のみキーを付与
+  }
+  return h;
+}
 
 // ---------- 状態管理 ----------
 const state = {
@@ -148,9 +184,13 @@ function clearApiKey() {
 function updateModeBadge() {
   const badge = document.getElementById('mode-badge');
   const modeText = document.getElementById('current-mode');
-  if (state.apiKey) {
+  if (API_PROXY_BASE) {
+    // バックエンド経由（キーはサーバー側／配布可能）
+    if (badge) { badge.textContent = '本番API（サーバー）'; badge.className = 'mode-badge api'; }
+    if (modeText) modeText.textContent = '🟢 本番API（サーバー経由）';
+  } else if (state.apiKey) {
     if (badge) { badge.textContent = '本番API'; badge.className = 'mode-badge api'; }
-    if (modeText) modeText.textContent = '🟢 OpenAI API';
+    if (modeText) modeText.textContent = '🟢 OpenAI API（端末キー）';
   } else {
     if (badge) { badge.textContent = 'モック'; badge.className = 'mode-badge mock'; }
     if (modeText) modeText.textContent = '🟡 モック動作';
@@ -514,7 +554,7 @@ function buildQRPayload(memo) {
 
 // ---------- Whisper（文字起こし） ----------
 async function transcribeAudio(audioBlob, item) {
-  if (!state.apiKey) {
+  if (!isLiveMode()) {
     await sleep(1500);
     if (state.recordingHandler === handleInitialAudio || !state._mockPattern) {
       // 初回：モックパターンを1つ選ぶ
@@ -534,9 +574,10 @@ async function transcribeAudio(audioBlob, item) {
   formData.append('model', 'whisper-1');
   formData.append('language', 'ja');
 
-  const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+  // バックエンド経由なら /api/transcribe、未設定なら端末のキーで直接OpenAIへ
+  const response = await fetch(apiEndpoint('audio/transcriptions'), {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${state.apiKey}` },
+    headers: apiHeaders(),   // FormData なので Content-Type はブラウザに任せる
     body: formData,
   });
   if (!response.ok) {
@@ -548,7 +589,7 @@ async function transcribeAudio(audioBlob, item) {
 
 // ---------- 初回発話の分析（どの項目が埋まっているか） ----------
 async function analyzeInitial(transcript, items) {
-  if (!state.apiKey) {
+  if (!isLiveMode()) {
     await sleep(1500);
     return (state._mockPattern && state._mockPattern.filled) || {};
   }
@@ -568,12 +609,9 @@ ${itemList}
 【出力】
 キーを項目key、値を抽出文字列または null とする JSON オブジェクトのみを返す。`;
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const response = await fetch(apiEndpoint('chat/completions'), {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${state.apiKey}`,
-      'Content-Type': 'application/json',
-    },
+    headers: apiHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       model: 'gpt-4o',
       messages: [
@@ -597,7 +635,7 @@ async function evaluateAnswer(item, answerTranscript) {
   // モデルに依存せず、聞き直し・不明への誤判定を防ぐ。
   if (isClearNegative(answerTranscript)) return 'なし';
 
-  if (!state.apiKey) {
+  if (!isLiveMode()) {
     await sleep(1000);
     // モック：回答がそのまま値になる（「わかりません」系は null）
     if (/わかりません|わからない|不明/.test(answerTranscript)) return null;
@@ -622,12 +660,9 @@ async function evaluateAnswer(item, answerTranscript) {
 
 【出力】 {"value": 文字列 または null} の JSON のみ。`;
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const response = await fetch(apiEndpoint('chat/completions'), {
     method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${state.apiKey}`,
-      'Content-Type': 'application/json',
-    },
+    headers: apiHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       model: 'gpt-4o',
       messages: [

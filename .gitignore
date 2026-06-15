@@ -1,0 +1,12 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
+
+# Node / Cloudflare Worker
+node_modules/
+.wrangler/
+.dev.vars
+
+# Claude Code local settings (machine-specific)
+.claude/settings.local.json
