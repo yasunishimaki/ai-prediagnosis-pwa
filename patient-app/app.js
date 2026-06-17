@@ -218,6 +218,7 @@ function startInterview() {
   state._mockPattern = null;
   // 前の患者のデータを絶対に持ち越さない（同一端末を使い回しても混ざらないように完全クリア）
   state.currentMemo = null;
+  state.initialSummary = '';
   state.editingItemKey = null;
   state.recordingHandler = handleInitialAudio;
   showScreen('recording');
@@ -319,12 +320,18 @@ async function handleInitialAudio(audioBlob) {
   try {
     const transcript = await transcribeAudio(audioBlob);
     state.fullTranscript = transcript;
+    state.initialSummary = transcript; // フォールバック：要約に失敗しても発話そのものを残す
 
     // 主訴別グループの判定（最初の発話にキーワードが含まれるか）
     buildActiveItems(transcript);
 
     setLoadingText('内容を整理しています', '不足している項目を確認中...');
-    const filled = await analyzeInitial(transcript, state.activeItems);
+    // 要約（メモ冒頭用）と項目抽出を並列実行
+    const [summary, filled] = await Promise.all([
+      summarizeInitial(transcript),
+      analyzeInitial(transcript, state.activeItems),
+    ]);
+    if (summary && summary.trim()) state.initialSummary = summary.trim();
 
     // 結果を memoData に反映し、不足項目を queue に積む
     state.queue = [];
@@ -551,15 +558,24 @@ function skipCurrentItem() {
 
 // ---------- ⑤ メモ確定 ----------
 function finishInterview() {
+  const items = state.activeItems.map(it => ({
+    key: it.key, label: it.label, icon: it.icon || '•',
+    value: state.memoData[it.key] || '不明',
+    highlight: !!it.highlight,
+  }));
+  // 患者が最初に話した内容の要約を【必ずメモ冒頭】に残す（抽出に失敗しても訴えを失わない）
+  const summary = (state.initialSummary || state.fullTranscript || '').trim();
+  if (summary) {
+    items.unshift({
+      key: '_initialSummary', label: '最初のお話（要約）', icon: '🗣️',
+      value: summary, highlight: true,
+    });
+  }
   state.currentMemo = {
     id: makeMemoId(),                          // メモ固有のID（履歴の重複判定に使用）
     clinicId: state.template.clinicId,
     clinicName: state.template.clinicName,
-    items: state.activeItems.map(it => ({
-      key: it.key, label: it.label, icon: it.icon || '•',
-      value: state.memoData[it.key] || '不明',
-      highlight: !!it.highlight,
-    })),
+    items,
     transcript: state.fullTranscript,
     createdAt: new Date().toISOString(),
   };
@@ -701,6 +717,38 @@ async function transcribeAudio(audioBlob, item) {
   }
   const result = await response.json();
   return result.text;
+}
+
+// ---------- 患者が最初に話した内容の要約（メモ冒頭に必ず残す） ----------
+async function summarizeInitial(transcript) {
+  if (!transcript) return '';
+  if (!isLiveMode()) {
+    // モック：発話そのものを要約代わりに使う
+    return transcript;
+  }
+  const systemPrompt = `あなたは医療事前問診の補助AIです。患者が最初に話した内容を、医師がひと目で把握できる簡潔な日本語の要約（1〜2文）にまとめてください。
+- 述べられた事実（症状・経過・期間・程度など）だけを含める。推測・診断はしない。
+- 要約文のみを返す（前置きや注釈は不要）。`;
+  try {
+    const response = await fetch(apiEndpoint('chat/completions'), {
+      method: 'POST',
+      headers: apiHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `患者の発話:\n「${transcript}」` },
+        ],
+        temperature: 0.2,
+      }),
+    });
+    if (!response.ok) throw new Error(`GPT-4o API エラー: ${response.status}`);
+    const result = await response.json();
+    return (result.choices[0].message.content || transcript).trim();
+  } catch (e) {
+    console.error('要約エラー:', e);
+    return transcript; // 失敗時は発話そのものを残す
+  }
 }
 
 // ---------- 初回発話の分析（どの項目が埋まっているか） ----------
@@ -850,6 +898,7 @@ function saveDraft() {
       queue: state.queue,
       currentItem: state.currentItem,
       fullTranscript: state.fullTranscript,
+      initialSummary: state.initialSummary || '',
       updatedAt: new Date().toISOString(),
     };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
@@ -884,6 +933,7 @@ function resumeInterview() {
   state.queue = draft.queue || [];
   state.attemptCount = 0;
   state.fullTranscript = draft.fullTranscript || '';
+  state.initialSummary = draft.initialSummary || '';
   state.currentMemo = null;
   state.editingItemKey = null;
   state.currentItem = null;
