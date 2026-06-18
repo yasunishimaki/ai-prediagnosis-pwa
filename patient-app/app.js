@@ -413,10 +413,15 @@ function askNextItem() {
 function renderFollowupQuestion(question, isReprompt) {
   setText('followup-label', state.currentItem.label);
   setText('followup-question', question);
+  // 聞き直しのときは、エラーや二重質問に見えないよう目立つ案内バーを出す
+  const banner = document.getElementById('followup-reprompt');
+  if (banner) banner.style.display = isReprompt ? 'block' : 'none';
+  const card = document.getElementById('followup-card');
+  if (card) card.classList.toggle('reprompt', !!isReprompt);
   const hint = document.getElementById('followup-hint');
   if (hint) {
     hint.textContent = isReprompt
-      ? 'もう少し具体的に教えてください。わからない場合はそのままお話しください。'
+      ? 'もう少し具体的に教えてください。わからない場合は「わかりません」とお話しください。'
       : 'マイクを押して、お答えください。';
   }
 }
