@@ -1,0 +1,3 @@
+# Cloudflare Pages: ルート(/) を患者アプリへ。配布URLは https://qureas-monshin.pages.dev だけで済む。
+# 受付アプリは /reception-app/ で引き続きアクセス可能。
+/    /patient-app/    302

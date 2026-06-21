@@ -2,16 +2,16 @@
 // AI事前問診メモ - デモ版（7月2日 クレアスクリニック）
 // 自由発話 → AIが不足項目を音声で追加質問 → メモ確定 → QR表示
 //
-// 【配布用バックエンド（任意）】
-// API_PROXY_BASE に Cloudflare Worker 等のURLを設定すると、APIキーを
-// クライアントに置かずに本番動作する（URLを他の人に配布できる）。
-// 空の場合は「端末ごとにAPIキー設定 or モック動作」になる。
+// 【配布用バックエンド】
+// このアプリと同じドメインの /api/*（Cloudflare Pages Functions: functions/api/*.js）が
+// OpenAI へ中継する。APIキーは Pages の環境変数(Secret)に保存し、クライアントには置かない。
+// 同一オリジン（同じドメイン）で呼ぶため CORS は不要。
 // ============================================
 
-// ====== ここを設定すると配布可能になる ======
-// 例: 'https://ai-prediagnosis-proxy.xxxxx.workers.dev'
-const API_PROXY_BASE = 'https://ai-prediagnosis-proxy.go-mm-8324.workers.dev';
-// Worker側で APP_TOKEN を設定した場合のみ、同じ合言葉を入れる（任意）
+// ====== バックエンド（同一ドメインの Pages Functions）======
+// 配信元と同じオリジンを使う。独自ドメインを後付けしてもそのまま動く。
+const API_PROXY_BASE = window.location.origin;
+// Pages 側で APP_TOKEN を設定した場合のみ、同じ合言葉を入れる（任意）
 const API_APP_TOKEN = '';
 // ===========================================
 
