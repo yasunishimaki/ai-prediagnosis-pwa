@@ -10,3 +10,6 @@ node_modules/
 
 # Claude Code local settings (machine-specific)
 .claude/settings.local.json
+
+# 社内検討メモ（公開リポジトリには置かない・ローカル管理）
+docs/医院提供に向けた検討事項.md
